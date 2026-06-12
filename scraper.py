@@ -3,36 +3,43 @@ from bs4 import BeautifulSoup
 import csv
 
 def scrape_tenders():
-    # Use the exact URL where you see the table
+    # Use a Session to persist headers and cookies
+    session = requests.Session()
     url = "https://eprocure.gov.in/eprocure/app?component=%24DirectLink&page=FrontEndTendersByOrganisation&service=direct&sp=SPv9ocG08bS43U4itO7HIntS0Fec7wUuNy1YFXyqSerE%3D"
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     
-    response = requests.get(url, headers=headers)
+    # Crucial: Headers that make it look like a real browser
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Referer": "https://eprocure.gov.in/eprocure/app"
+    })
+    
+    response = session.get(url)
     soup = BeautifulSoup(response.text, 'html.parser')
     
-    # We find the table by looking for the list_table class
+    # Based on your inspector, the table uses the class 'list_table'
     table = soup.find('table', {'class': 'list_table'})
     
     tenders = []
     if table:
-        # Each row in the table
+        # Find all rows in the table body
         rows = table.find_all('tr')
         for row in rows:
             cols = row.find_all('td')
-            if len(cols) >= 4:  # Ensure there are enough columns
-                # Adjust these indices (0, 1, 2, etc.) to match your table columns
+            # Check for columns - usually ID, Title, Value are prominent
+            if len(cols) >= 4:
+                # Adjust index if necessary based on the specific CPPP view
                 tender_id = cols[0].text.strip()
                 tender_title = cols[1].text.strip()
-                tender_value = cols[3].text.strip() # Usually the 4th column
+                tender_value = cols[3].text.strip()
                 tenders.append([tender_id, tender_title, tender_value])
-                
-    # Save to CSV
+    
+    print(f"DEBUG: Found {len(tenders)} rows in the table.")
+    
     with open('tenders.csv', 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow(['Tender ID', 'Tender Title', 'Tender Value'])
         writer.writerows(tenders)
-        
-    print(f"Successfully scraped {len(tenders)} tenders.")
 
 if __name__ == "__main__":
     scrape_tenders()

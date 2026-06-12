@@ -1,38 +1,40 @@
-import requests
-from bs4 import BeautifulSoup
+from playwright.sync_api import sync_playwright
 import csv
 
 def scrape_tenders():
-    url = "https://eprocure.gov.in/eprocure/app?component=%24DirectLink&page=FrontEndTendersByOrganisation&service=direct&sp=SPv9ocG08bS43U4itO7HIntS0Fec7wUuNy1YFXyqSerE%3D"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    
-    response = requests.get(url, headers=headers)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    
-    table = soup.find('table', {'class': 'list_table'})
-    
-    tenders = []
-    if table:
-        # We skip the first 2 rows because they are headers/labels
-        rows = table.find_all('tr')[2:] 
+    with sync_playwright() as p:
+        # Launch headless browser
+        browser = p.chromium.launch()
+        page = browser.new_page()
+        
+        # Navigate to the URL
+        url = "https://eprocure.gov.in/eprocure/app?component=%24DirectLink&page=FrontEndTendersByOrganisation&service=direct&sp=SPv9ocG08bS43U4itO7HIntS0Fec7wUuNy1YFXyqSerE%3D"
+        page.goto(url, wait_until="networkidle")
+        
+        # Wait specifically for the table to appear
+        page.wait_for_selector(".list_table")
+        
+        # Extract rows
+        rows = page.query_selector_all(".list_table tr")
+        tenders = []
+        
         for row in rows:
-            cols = row.find_all('td')
-            if len(cols) >= 6:  # Ensure the row has enough columns
-                # Based on standard CPPP tables:
-                # Column 1: Tender ID
-                # Column 2: Tender Title
-                # Column 4: Tender Value
-                tender_id = cols[1].text.strip()
-                tender_title = cols[2].text.strip()
-                tender_value = cols[4].text.strip()
-                
-                tenders.append([tender_id, tender_title, tender_value])
-    
+            cols = row.query_selector_all("td")
+            if len(cols) >= 4:
+                # Based on standard CPPP table structure
+                tender_id = cols[1].inner_text().strip()
+                tender_title = cols[2].inner_text().strip()
+                tender_val = cols[4].inner_text().strip()
+                tenders.append([tender_id, tender_title, tender_val])
+        
+        browser.close()
+        
+    # Save to CSV
     with open('tenders.csv', 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow(['Tender ID', 'Tender Title', 'Tender Value'])
         writer.writerows(tenders)
-        print(f"Scraped {len(tenders)} rows.")
+        print(f"Successfully scraped {len(tenders)} tenders.")
 
 if __name__ == "__main__":
     scrape_tenders()
